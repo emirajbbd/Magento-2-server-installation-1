@@ -30,7 +30,7 @@ REPO_PERCONA="https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
 REPO_REMI="http://rpms.famillecollet.com/enterprise/remi-release-${CENTOS_VERSION}.rpm"
 
 # WebStack Packages
-EXTRA_PACKAGES="autoconf automake dejavu-fonts-common dejavu-sans-fonts libtidy libpcap gettext-devel recode gflags tbb ed lz4 libyaml libdwarf bind-utils e2fsprogs svn screen gcc iptraf inotify-tools iptables smartmontools net-tools mlocate unzip vim wget curl sudo bc mailx clamav-filesystem clamav-server clamav-update clamav-milter-systemd clamav-data clamav-server-systemd clamav-scanner-systemd clamav clamav-milter clamav-lib clamav-scanner logrotate git patch ipset strace rsyslog ncurses-devel GeoIP GeoIP-devel geoipupdate openssl-devel ImageMagick libjpeg-turbo-utils pngcrush jpegoptim moreutils lsof net-snmp net-snmp-utils xinetd python3-virtualenv python3-wheel-wheel python3-pip python3-devel ncftp postfix augeas-libs libffi-devel mod_ssl dnf-automatic sysstat libuuid-devel uuid-devel attr iotop expect unixODBC gcc-c++"
+EXTRA_PACKAGES="autoconf automake dejavu-fonts-common dejavu-sans-fonts libtidy libpcap gettext-devel recode gflags tbb ed lz4 libyaml libdwarf bind-utils e2fsprogs svn screen gcc iptraf inotify-tools iptables smartmontools net-tools mlocate unzip vim wget curl sudo bc mailx clamav-filesystem clamav-server clamav-update clamav-milter-systemd clamav-data clamav-server-systemd clamav-scanner-systemd clamav clamav-milter clamav-lib logrotate git patch ipset strace rsyslog ncurses-devel GeoIP GeoIP-devel geoipupdate openssl-devel ImageMagick libjpeg-turbo-utils pngcrush jpegoptim moreutils lsof net-snmp net-snmp-utils xinetd python3-virtualenv python3-wheel-wheel python3-pip python3-devel ncftp postfix augeas-libs libffi-devel mod_ssl dnf-automatic sysstat libuuid-devel uuid-devel attr iotop expect unixODBC gcc-c++"
 PHP_PACKAGES=(cli common fpm opcache gd curl mbstring bcmath soap mcrypt mysqlnd pdo xml xmlrpc intl gmp gettext-gettext phpseclib recode symfony-class-loader symfony-common tcpdf tcpdf-dejavu-sans-fonts tidy snappy lz4) 
 PHP_PECL_PACKAGES=(pecl-redis pecl-lzf pecl-geoip pecl-zip pecl-memcache pecl-oauth)
 PERL_MODULES=(LWP-Protocol-https Config-IniFiles libwww-perl CPAN Template-Toolkit Time-HiRes ExtUtils-CBuilder ExtUtils-Embed ExtUtils-MakeMaker TermReadKey DBI DBD-MySQL Digest-HMAC Digest-SHA1 Test-Simple Moose Net-SSLeay devel)
@@ -39,7 +39,7 @@ PERL_MODULES=(LWP-Protocol-https Config-IniFiles libwww-perl CPAN Template-Toolk
 REPO_MAGENX_TMP="https://raw.githubusercontent.com/magenx/Magento-2-server-installation/master/"
 NGINX_VERSION=$(curl -s http://nginx.org/en/download.html | grep -oP '(?<=gz">nginx-).*?(?=</a>)' | head -1)
 NGINX_BASE="https://raw.githubusercontent.com/magenx/Magento-nginx-config/master/"
-NGINX_EXTRA_CONF="assets.conf error_page.conf extra_protect.conf export.conf pagespeed.conf status.conf varnish_proxy.conf setup.conf php_backend.conf maps.conf phpmyadmin.conf maintenance.conf"
+GITHUB_REPO_API_URL="https://api.github.com/repos/magenx/Magento-nginx-config/contents/magento2"
 
 # Debug Tools
 MYSQL_TUNER="https://raw.githubusercontent.com/major/MySQLTuner-perl/master/mysqltuner.pl"
@@ -636,6 +636,7 @@ END
           echo
             GREENTXT "NGINX INSTALLED  -  OK"
             echo
+	    dnf -y module disable nginx:* >/dev/null 2>&1
             ## plug in service status alert
             cp /usr/lib/systemd/system/nginx.service /etc/systemd/system/nginx.service
             sed -i "/^After.*/a OnFailure=service-status-mail@%n.service" /etc/systemd/system/nginx.service
@@ -767,6 +768,16 @@ sed -i "s/^logfile.*/logfile \/var\/log\/redis\/redis-${REDISPORT}.log/"  /etc/r
 sed -i "s/^pidfile.*/pidfile \/var\/run\/redis-${REDISPORT}.pid/"  /etc/redis-${REDISPORT}.conf
 sed -i "s/^port.*/port ${REDISPORT}/" /etc/redis-${REDISPORT}.conf
 sed -i "s/dump.rdb/dump-${REDISPORT}.rdb/" /etc/redis-${REDISPORT}.conf
+sed -i '/^# rename-command CONFIG ""/a\
+rename-command SLAVEOF "" \
+rename-command CONFIG "" \
+rename-command PUBLISH "" \
+rename-command SAVE "" \
+rename-command SHUTDOWN "" \
+rename-command DEBUG "" \
+rename-command BGSAVE "" \
+rename-command BGREWRITEAOF ""
+'  /etc/redis-${REDISPORT}.conf
 done
 echo
 systemctl daemon-reload
@@ -1262,15 +1273,12 @@ wget -qO /etc/nginx/fastcgi_params  ${NGINX_BASE}magento${MAGE_VERSION}/fastcgi_
 wget -qO /etc/nginx/nginx.conf  ${NGINX_BASE}magento${MAGE_VERSION}/nginx.conf
 mkdir -p /etc/nginx/sites-enabled
 mkdir -p /etc/nginx/sites-available && cd $_
-wget -q ${NGINX_BASE}magento${MAGE_VERSION}/sites-available/default.conf
-wget -q ${NGINX_BASE}magento${MAGE_VERSION}/sites-available/magento${MAGE_VERSION}.conf
+curl -s ${GITHUB_REPO_API_URL}/sites-available 2>&1 | awk -F'"' '/download_url/ {print $4 ; system("curl -sO "$4)}' >/dev/null
 ln -s /etc/nginx/sites-available/magento${MAGE_VERSION}.conf /etc/nginx/sites-enabled/magento${MAGE_VERSION}.conf
 ln -s /etc/nginx/sites-available/default.conf /etc/nginx/sites-enabled/default.conf
 mkdir -p /etc/nginx/conf_m${MAGE_VERSION} && cd /etc/nginx/conf_m${MAGE_VERSION}/
-for CONFIG in ${NGINX_EXTRA_CONF}
-do
-wget -q ${NGINX_BASE}magento${MAGE_VERSION}/conf_m${MAGE_VERSION}/${CONFIG}
-done
+curl -s ${GITHUB_REPO_API_URL}/conf_m2 2>&1 | awk -F'"' '/download_url/ {print $4 ; system("curl -sO "$4)}' >/dev/null
+
 sed -i "s/user  nginx;/user  ${MAGE_OWNER};/" /etc/nginx/nginx.conf
 sed -i "s/example.com/${MAGE_DOMAIN}/g" /etc/nginx/sites-available/magento${MAGE_VERSION}.conf
 sed -i "s/example.com/${MAGE_DOMAIN}/g" /etc/nginx/nginx.conf
@@ -1314,8 +1322,17 @@ GREENTXT "VARNISH CACHE CONFIGURATION"
     YELLOWTXT "VARNISH CACHE PORT :8081"
 fi
 echo
-GREENTXT "DOWNLOADING n98-MAGERUN"
+GREENTXT "DOWNLOADING n98-MAGERUN2"
      curl -s -o /usr/local/bin/magerun2 https://files.magerun.net/n98-magerun2.phar
+echo
+GREENTXT "CACHE CLEANER SCRIPT"
+cat > /usr/local/bin/flushcache <<END
+#!/bin/bash
+redis-cli -p 6380 flushall
+magerun2 cache:flush
+systemctl reload php-fpm >/dev/null
+systemctl reload nginx >/dev/null
+END
 echo
 GREENTXT "SYSTEM AUTO UPDATE WITH DNF AUTOMATIC"
 sed -i 's/apply_updates = no/apply_updates = yes/' /etc/dnf/automatic.conf
@@ -1521,6 +1538,7 @@ htpasswd -b -c /etc/nginx/.mysql USERNAME PASSWORD
 [mysql tuner]: /usr/local/bin/mysqltuner
 
 [n98-magerun2]: /usr/local/bin/magerun2
+[cache cleaner]: /usr/local/bin/flushcache
 
 [service alert]: /usr/local/bin/service-status-mail.sh
 [audit log]: ausearch -k auditmgnx | aureport -f -i
